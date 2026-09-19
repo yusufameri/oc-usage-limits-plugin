@@ -13,7 +13,7 @@ OpenCode TUI plugin that shows Codex, OpenCode GO, Command Code, ZAI, Synthetic,
 - Shows current MiniMax Token Plan rolling 5-hour and weekly windows.
 - Shows current Qwen Token Plan windows from the local `qwencloud` CLI.
 - Shows current OpenCode GO rolling, weekly, and monthly windows.
-- Shows current Command Code rolling 5-hour and weekly credit windows.
+- Shows current Command Code rolling 5-hour, weekly, and monthly credit windows.
 - Adds compact prompt-footer usage when the current session uses an OpenAI, OpenCode GO, Command Code, ZAI Coding Plan, Synthetic, or MiniMax Token Plan model.
 - Providers are toggled from `~/.config/opencode/usage-limits.jsonc`.
 - Reads OpenCode-connected credentials first, then falls back to explicit config/env credentials.
@@ -149,7 +149,7 @@ Disabled providers are hidden:
 | `minimax` | MiniMax Token Plan | `OC_MINIMAX_TOKEN_PLAN_KEY` | Bearer | `https://www.minimax.io` |
 | `qwen` | Qwen Token Plan | `qwencloud` CLI | CLI | — |
 | `opencode-go` | OpenCode GO usage | `OPENCODE_API_KEY` | Bearer | `https://opencode.ai/zen/go/v1` |
-| `commandcode` | Command Code credit windows | `COMMANDCODE_API_KEY` | Bearer | `https://api.commandcode.ai` |
+| `commandcode` | Command Code credit windows (5h/weekly/monthly) | `COMMANDCODE_API_KEY` | Bearer | `https://api.commandcode.ai` |
 
 Synthetic always uses `Bearer` auth and ignores `authorizationScheme`.
 
@@ -188,6 +188,8 @@ Command Code lookup order:
 1. Config `authPath` JSON file (`{ "key": "..." }` / `{ "apiKey": "..." }` / `{ "commandcode": { "key": "..." } }`).
 2. OpenCode auth at `~/.local/share/opencode/auth.json`, provider `commandcode`.
 3. Config `apiKey`, including `{env:COMMANDCODE_API_KEY}` references.
+
+Step 2 applies to the official `api.commandcode.ai` base URL. With a custom `baseUrl`, only `authPath` (step 1) and `apiKey` (step 3) are used.
 
 ## Display
 

@@ -23,6 +23,7 @@ import {
   parseUsagePercentage,
   percentageQuota,
   resetInstantOrNull,
+  unknownQuota,
 } from "@/usage.ts";
 import { isRecord } from "@/utils.ts";
 import type { JsonValue } from "@/utils.ts";
@@ -151,11 +152,11 @@ const commandCodeWindow = (
   if (Result.isFailure(parsedUsed) || Result.isFailure(parsedCap)) {
     return null;
   }
-  if (parsedCap.success <= 0 || parsedUsed.success > parsedCap.success) {
+  if (parsedCap.success <= 0) {
     return null;
   }
   const parsedPercent = parseUsagePercentage(
-    (parsedUsed.success / parsedCap.success) * 100
+    Math.min(parsedUsed.success / parsedCap.success, 1) * 100
   );
   if (Result.isFailure(parsedPercent)) {
     return null;
@@ -213,12 +214,19 @@ const commandCodeMonthlyWindow = (
     return null;
   }
   const remaining = monthly.success + purchased.success + free.success;
-  const used = spent ?? 0;
-  const total = remaining + used;
+  if (spent === null) {
+    return {
+      kind: "monthly",
+      label: "monthly",
+      quota: unknownQuota,
+      resetsAt: null,
+    };
+  }
+  const total = remaining + spent;
   if (total <= 0) {
     return null;
   }
-  const parsedPercent = parseUsagePercentage((used / total) * 100);
+  const parsedPercent = parseUsagePercentage((spent / total) * 100);
   if (Result.isFailure(parsedPercent)) {
     return null;
   }

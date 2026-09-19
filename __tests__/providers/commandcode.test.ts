@@ -14,7 +14,7 @@ const installResponses = (
   let index = 0;
   globalThis.fetch = asFetch((input: string | URL | Request) => {
     seen.push(String(input));
-    const response = responses[index] ?? Response.json({});
+    const response = responses[index] ?? new Response(null, { status: 502 });
     index += 1;
     return Promise.resolve(response);
   });
@@ -43,6 +43,32 @@ const creditsBody = (fiveHourUsed: number, weeklyUsed: number): Response =>
         exceeded: false,
         resetAt: 1_790_397_459_226,
         used: weeklyUsed,
+      },
+    },
+  });
+
+const overCapBody = (): Response =>
+  Response.json({
+    credits: {
+      creditThreshold: 0,
+      freeCredits: 0,
+      monthlyCredits: 70,
+      purchasedCredits: 5,
+    },
+    windowLimits: {
+      exceeded: null,
+      fiveHour: {
+        cap: 14,
+        exceeded: true,
+        resetAt: 1_789_810_659_226,
+        used: 20,
+      },
+      limited: true,
+      weekly: {
+        cap: 35,
+        exceeded: false,
+        resetAt: 1_790_397_459_226,
+        used: 7,
       },
     },
   });
@@ -81,8 +107,23 @@ describe("Command Code provider", () => {
     expect(usage.windows[2]?.resetsAt).toBeNull();
   });
 
-  test("shows 0% monthly when the summary request is unavailable", async () => {
-    installResponses([creditsBody(1, 1)]);
+  test("clamps an exhausted bucket to 100% instead of dropping it", async () => {
+    installResponses([overCapBody(), Response.json({ totalCredits: 5 })]);
+
+    const usage = await fetchCommandCodeUsage(
+      undefined,
+      { commandcode: { key: "cc-token" } },
+      1000
+    );
+
+    expect(usage.windows[0]).toMatchObject({
+      kind: "rolling",
+      quota: { usedPercent: 100 },
+    });
+  });
+
+  test("keeps an unknown monthly quota when the summary request fails", async () => {
+    installResponses([creditsBody(1, 1), new Response(null, { status: 500 })]);
 
     const usage = await fetchCommandCodeUsage(
       undefined,
@@ -93,7 +134,7 @@ describe("Command Code provider", () => {
     expect(usage.windows).toMatchObject([
       { kind: "rolling" },
       { kind: "weekly" },
-      { kind: "monthly", quota: { usedPercent: 0 } },
+      { kind: "monthly", quota: { _tag: "Unknown" } },
     ]);
   });
 
