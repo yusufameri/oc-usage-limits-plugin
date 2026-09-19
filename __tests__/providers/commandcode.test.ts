@@ -2,49 +2,50 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { fetchCommandCodeUsage } from "@/providers/commandcode.ts";
 
-const CREDITS_PATH = "/alpha/billing/credits";
-const SUMMARY_PATH = "/alpha/usage/summary";
-
 const originalFetch = globalThis.fetch;
 
-const installRoutes = (
-  routes: Readonly<Record<string, unknown>>
+// SAFETY: The mock implements the subset of fetch used by these tests.
+const asFetch = <T>(value: T): typeof fetch => value as typeof fetch;
+
+const installResponses = (
+  responses: readonly Response[]
 ): readonly string[] => {
   const seen: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = String(input);
-    seen.push(url);
-    const suffix = Object.keys(routes).find((key) => url.endsWith(key));
-    const body = suffix === undefined ? {} : routes[suffix];
-    return body instanceof Response ? body : Response.json(body);
-  }) as typeof fetch;
+  let index = 0;
+  globalThis.fetch = asFetch((input: string | URL | Request) => {
+    seen.push(String(input));
+    const response = responses[index] ?? Response.json({});
+    index += 1;
+    return Promise.resolve(response);
+  });
   return seen;
 };
 
-const creditsBody = (fiveHourUsed: number, weeklyUsed: number) => ({
-  credits: {
-    creditThreshold: 0,
-    freeCredits: 0,
-    monthlyCredits: 70,
-    purchasedCredits: 5,
-  },
-  windowLimits: {
-    exceeded: null,
-    fiveHour: {
-      cap: 14,
-      exceeded: false,
-      resetAt: 1_789_810_659_226,
-      used: fiveHourUsed,
+const creditsBody = (fiveHourUsed: number, weeklyUsed: number): Response =>
+  Response.json({
+    credits: {
+      creditThreshold: 0,
+      freeCredits: 0,
+      monthlyCredits: 70,
+      purchasedCredits: 5,
     },
-    limited: true,
-    weekly: {
-      cap: 35,
-      exceeded: false,
-      resetAt: 1_790_397_459_226,
-      used: weeklyUsed,
+    windowLimits: {
+      exceeded: null,
+      fiveHour: {
+        cap: 14,
+        exceeded: false,
+        resetAt: 1_789_810_659_226,
+        used: fiveHourUsed,
+      },
+      limited: true,
+      weekly: {
+        cap: 35,
+        exceeded: false,
+        resetAt: 1_790_397_459_226,
+        used: weeklyUsed,
+      },
     },
-  },
-});
+  });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -52,10 +53,10 @@ afterEach(() => {
 
 describe("Command Code provider", () => {
   test("parses 5h, weekly, and derived monthly windows", async () => {
-    const seen = installRoutes({
-      [CREDITS_PATH]: creditsBody(7, 7),
-      [SUMMARY_PATH]: { totalCost: 5, totalCredits: 5 },
-    });
+    const seen = installResponses([
+      creditsBody(7, 7),
+      Response.json({ totalCost: 5, totalCredits: 5 }),
+    ]);
 
     const usage = await fetchCommandCodeUsage(
       undefined,
@@ -81,7 +82,7 @@ describe("Command Code provider", () => {
   });
 
   test("shows 0% monthly when the summary request is unavailable", async () => {
-    installRoutes({ [CREDITS_PATH]: creditsBody(1, 1) });
+    installResponses([creditsBody(1, 1)]);
 
     const usage = await fetchCommandCodeUsage(
       undefined,
@@ -97,7 +98,7 @@ describe("Command Code provider", () => {
   });
 
   test("supports a literal API key without OpenCode auth", async () => {
-    const seen = installRoutes({ [CREDITS_PATH]: creditsBody(1, 1) });
+    const seen = installResponses([creditsBody(1, 1)]);
 
     await fetchCommandCodeUsage({ apiKey: "literal-token" }, {}, 1000);
 
@@ -109,7 +110,7 @@ describe("Command Code provider", () => {
       "missing Command Code key"
     );
 
-    installRoutes({ [CREDITS_PATH]: { credits: {} } });
+    installResponses([Response.json({ credits: {} })]);
     await expect(
       fetchCommandCodeUsage(undefined, { commandcode: { key: "key" } }, 1000)
     ).rejects.toThrow("invalid Command Code usage");

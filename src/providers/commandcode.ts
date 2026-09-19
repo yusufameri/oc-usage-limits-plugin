@@ -121,10 +121,10 @@ const readCommandCodeAuthPathKey = (
 const resetFromEpochMs = (
   value: JsonValue | undefined
 ): ResetInstant | null => {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-  return resetInstantOrNull(new Date(value));
+  const parsed = parseUsageCount(value);
+  return Result.isFailure(parsed)
+    ? null
+    : resetInstantOrNull(new Date(parsed.success));
 };
 
 /**
@@ -179,10 +179,8 @@ const summarySpentCredits = (payload: JsonValue | null): number | null => {
   if (!isRecord(payload)) {
     return null;
   }
-  const spent = payload.totalCredits ?? payload.totalCost;
-  return typeof spent === "number" && Number.isFinite(spent) && spent >= 0
-    ? spent
-    : null;
+  const spent = parseUsageCount(payload.totalCredits ?? payload.totalCost);
+  return Result.isFailure(spent) ? null : spent.success;
 };
 
 /**
@@ -307,6 +305,7 @@ const fetchCommandCodeUsageEffect = (
       })
       .pipe(Effect.catchCause(() => Effect.succeed<JsonValue | null>(null)));
 
+    // SAFETY: windowLimits was validated as a record by the guard above.
     const limits = payload.windowLimits as ProviderPayload;
     const windows = [
       commandCodeWindow(limits.fiveHour, "rolling", "5h"),
